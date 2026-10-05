@@ -110,6 +110,23 @@ static double tof;
 static float distance;
 static float angle;
 
+/* --- ADD THIS FOR EXTERNAL I2C MCU COMMUNICATION --- */
+extern I2C_HandleTypeDef hi2c1; // Borrow the I2C handle initialized in main/i2c.c
+
+// ADDED START
+
+/* 5-byte UWB Packet Structure */
+typedef struct __attribute__((packed)) {
+    uint8_t  header;       // 0xAA
+    uint16_t distance_mm;  // Distance in millimeters
+    int16_t  angle_deg;    // Calculated AoA angle
+} UWB_Packet_t;
+
+// Extern reference to USART1_SendBuffer defined in usart.c
+extern uint16_t USART1_SendBuffer(const char* buffer, uint16_t length, int flag);
+
+// ADDED END
+
 /* Values for the PG_DELAY and TX_POWER registers reflect the bandwidth and power of the spectrum at the current
  * temperature. These values can be calibrated prior to taking reference measurements. See NOTE 2 below. */
 extern dwt_txconfig_t txconfig_options;
@@ -453,6 +470,23 @@ void ranging_process(uint8_t rx_buffer[], uint32_t frame_len)
 
 						angle = Res.angle;
 						distance = Res.dist_cm/100.0;
+
+						// ADDED START
+
+						/* --- PASTE THIS BLOCK RIGHT HERE --- */
+
+						/* --- SEND VIA USART1 (PA9 TX) --- */
+						UWB_Packet_t tx_packet;
+						tx_packet.header      = 0xAA;
+						tx_packet.distance_mm = (uint16_t)(Res.dist_cm * 10.0f); // Convert cm to mm
+						tx_packet.angle_deg   = (int16_t)Res.angle;
+
+						// Transmit data over I2C1 to the external MCU
+						//HAL_I2C_Master_Transmit(&hi2c1, EXTERNAL_MCU_ADDR, (uint8_t*)&tx_packet, sizeof(tx_packet), 50);
+						// Send using polling mode (flag = true) over USART1
+						USART1_SendBuffer((const char*)&tx_packet, sizeof(tx_packet), true);
+
+						// ADDED END
 					}
 				}
 			} //if STS good on the Final message reception
